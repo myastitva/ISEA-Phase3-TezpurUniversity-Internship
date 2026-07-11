@@ -104,7 +104,7 @@ The screenshots are available in the **screenshots/** folder.
 | wireshark_messages.png | Message Transmission |
 
 
-## -------------------------------Brief Description of the Implementation--------------------------------------------------
+## --------------Brief Description of the Implementation--------------
 The project follows the Client–Server architecture.
 
 ### Server
