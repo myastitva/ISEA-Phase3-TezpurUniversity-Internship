@@ -1,4 +1,4 @@
-# ____________________________________________GUI Based TCP Chat Application____________________________________________________
+# GUI Based TCP Chat Application
 
 ## Objective:
 The objective of this assignment is to develop a GUI-based TCP Chat Application by integrating the networking concepts implemented in Assignment 5 with a user-friendly graphical interface using Python Tkinter and ttkbootstrap. The application allows multiple clients to communicate through a TCP server using both broadcast and private messaging while providing an intuitive chat interface.
