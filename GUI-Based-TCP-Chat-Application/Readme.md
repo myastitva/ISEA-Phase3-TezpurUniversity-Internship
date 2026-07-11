@@ -75,7 +75,7 @@ python client_gui.py
 ### Step 4 – Login
 - Enter Username
 - Click **Connect**
-- 
+
 ### Step 5 – Chat
 Features available:
 - Broadcast Messages
