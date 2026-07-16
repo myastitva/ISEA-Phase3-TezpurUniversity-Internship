@@ -10,16 +10,17 @@ PORT = 5000
 
 client = None
 
-def connect_to_server(username):
+def connect_to_server(username, password):
     global client
     client = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     client.connect((SERVER_IP, PORT))
-    client.send(username.encode())
+    login_data = f"LOGIN|{username}|{password}"
+    client.send(login_data.encode())
+    response = client.recv(1024).decode()
+    return response
     
 def send_message():
-
     message = message_entry.get().strip()
-
     if not message:
         return
 
@@ -39,10 +40,7 @@ def send_message():
 
     except Exception as e:
 
-        messagebox.showerror(
-            "Send Error",
-            str(e)
-        )
+        messagebox.showerror("Send Error",str(e))
 
 def receive_messages():
     buffer = ""
@@ -50,7 +48,9 @@ def receive_messages():
         try:
             data = client.recv(1024).decode()
             if not data:
-                break
+                    chat.after(0,lambda: messagebox.showinfo("Session Expired","You have been logged out due to inactivity."))
+                    chat.after(0, disconnect)
+                    break
 
             # Add newly received data to buffer
             buffer += data
@@ -90,31 +90,76 @@ def receive_messages():
                     chat_box.see(tk.END)
                     chat_box.config(state="disabled")
 
-        except Exception as e:
-            print("Receive Error:", e)
+        except Exception:
+            try:
+                if chat.winfo_exists():
+                    chat.after(0,lambda: messagebox.showinfo( "Disconnected","You have been disconnected from the server." ) )
+                     chat.after(0, disconnect)
+            except:
+                pass
             break
 # --------------------------------------------------
 # Login Button Function
 # --------------------------------------------------
 def login():
-    username = username_entry.get().strip()
 
+    global client
+
+    username = username_entry.get().strip()
+    password = password_entry.get()
+
+    # Username validation
     if username == "":
         messagebox.showerror("Login Error","Username cannot be empty!")
         return
 
-    # Password is optional for now
-    password = password_entry.get().strip()
-    status_label.config(text="Status : Ready",bootstyle="success")
-    print(f"Username : {username}")
+    # Password validation
+    if password == "":
+        messagebox.showerror( "Login Error", "Password cannot be empty!" )
+        return
 
     try:
-        connect_to_server(username)
-        app.withdraw()
-        open_chat_window(username)
-    
+
+        status_label.config(
+            text="Status : Connecting...",
+            bootstyle="warning"
+        )
+
+        response = connect_to_server(username,password)
+
+        if response == "LOGIN_SUCCESS":
+            app.withdraw()
+
+            password_entry.delete(0,tk.END)
+            app.withdraw()
+            open_chat_window(username)
+
+        elif response == "DUPLICATE_LOGIN":
+            status_label.config(text="Status : Login Failed",  bootstyle="danger" )
+            messagebox.showerror("Login Failed","This user is already logged in.")
+            if client:
+                client.close()
+                client = None
+                
+        elif response == "ACCOUNT_BLOCKED":
+            status_label.config(text="Status : Account Blocked",bootstyle="danger" )
+            messagebox.showerror("Account Blocked","Too many failed login attempts.\n""Please try again after 30 seconds." )
+            if client:
+                client.close()
+                client = None
+
+        else:
+            status_label.config( text="Status : Login Failed",bootstyle="danger")
+            messagebox.showerror("Login Failed","Invalid username or password.")
+            if client:
+                client.close()
+                client = None
+
     except Exception as e:
+
+        status_label.config(text="Status : Connection Failed", bootstyle="danger")
         messagebox.showerror("Connection Error",str(e))
+        
         
         
 def disconnect():
@@ -123,16 +168,38 @@ def disconnect():
     global chat
 
     try:
+
         if client:
+
+            try:
+                client.send(b"LOGOUT")
+            except:
+                pass
+
+            try:
+                client.shutdown(socket.SHUT_WR)
+            except:
+                pass
+
             client.close()
+            client = None
 
     except:
         pass
 
-    chat.destroy()
+    if chat.winfo_exists():
+        chat.destroy()
+
+    username_entry.delete(0, tk.END)
+    password_entry.delete(0, tk.END)
+
+    status_label.config(
+        text="Status : Ready",
+        bootstyle="secondary"
+    )
 
     app.deiconify()
-
+    
 # --------------------------------------------------
 # Temporary Chat Window
 # --------------------------------------------------
@@ -369,7 +436,7 @@ username_entry = ttk.Entry(app,width=38)
 username_entry.pack(pady=(5, 15))
 
 # Password
-ttk.Label(app,text="Password (Optional)").pack(anchor="w", padx=50)
+ttk.Label(app,text="Password").pack(anchor="w", padx=50)
 password_entry = ttk.Entry(app,width=38,show="*")
 password_entry.pack(pady=(5, 20))
 
