@@ -74,6 +74,48 @@ Run on each client:
 ```bash
 python client_gui.py
 ```
+## User Registration
+
+The application provides a separate utility script (`create_users.py`) for registering new users securely.
+
+### Purpose
+
+Instead of manually editing the `users.csv` file, administrators can execute the registration script to add new users. The script automatically hashes the password using the SHA-256 algorithm before storing it, ensuring that plain-text passwords are never saved.
+
+### How to Register a New User
+
+Run the following command:
+
+```bash
+python create_users.py
+```
+
+The script will prompt for:
+
+```
+Enter Username:
+Enter Password:
+```
+
+Example:
+
+```
+Enter Username: John
+Enter Password: john123
+```
+
+After successful registration, the user's credentials are securely stored in `users.csv` as:
+
+- Username
+- SHA-256 Password Hash
+
+### Notes
+
+- Usernames must be unique.
+- Passwords are automatically hashed before storage.
+- Plain-text passwords are never saved.
+- Newly registered users can immediately log in using the GUI client.
+- No manual modification of `users.csv` is required.
 
 ### Step 4 – Login
 - Enter Username and Password
