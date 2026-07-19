@@ -3,11 +3,13 @@ import hashlib
 import os
 
 USER_FILE = "users.csv"
+
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 
-# Creating users.csv if it doesn't exist
+# Create users.csv if it doesn't exist
 if not os.path.exists(USER_FILE):
     with open(USER_FILE, "w", newline="") as file:
         writer = csv.writer(file)
