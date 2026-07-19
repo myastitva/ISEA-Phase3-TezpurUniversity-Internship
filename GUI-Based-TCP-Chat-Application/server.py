@@ -5,9 +5,14 @@ import time
 from datetime import datetime
 import os
 import hashlib
+import json
 
-HOST = "10.0.0.1"
-PORT = 5000
+with open("config.json", "r") as file:
+    config = json.load(file)
+
+HOST = config["HOST"]
+PORT = config["PORT"]
+BUFFER_SIZE = config["BUFFER_SIZE"]
 
 clients = []
 usernames = {}
@@ -16,18 +21,21 @@ client_ports = {}
 login_times = {}
 status = {}
 
+clients_lock = threading.Lock()
+
 message_count = 0
 broadcast_count = 0
 private_count = 0
 start_time = None
 end_time = None
+stats_lock = threading.Lock()
 
 # -----------------------------
 # Failed Login Protection
 # -----------------------------
-MAX_FAILED_ATTEMPTS = 5
-BLOCK_DURATION = 30 # seconds (change to 60 before submission)
-SESSION_TIMEOUT = 20     # seconds
+MAX_FAILED_ATTEMPTS = config["MAX_FAILED_ATTEMPTS"]
+BLOCK_DURATION = config["BLOCK_DURATION"]
+SESSION_TIMEOUT = config["SESSION_TIMEOUT"]
 
 failed_attempts = {}
 blocked_until = {}
@@ -76,7 +84,6 @@ def is_user_blocked(username):
 
 def record_failed_attempt(username):
     failed_attempts[username] = (failed_attempts.get(username, 0) + 1)
-
     if failed_attempts[username] >= MAX_FAILED_ATTEMPTS:
         blocked_until[username] = (time.time() + BLOCK_DURATION)
         failed_attempts[username] = 0
@@ -87,7 +94,8 @@ def reset_failed_attempts(username):
     failed_attempts.pop(username, None)
     
 def is_user_logged_in(username):
-    return username in usernames.values()
+    with clients_lock:
+        return username in usernames.values()
 
 #-----file checking---------
 if not os.path.exists(HISTORY_FILE):
@@ -120,36 +128,67 @@ def send_history(client):
     except:
         pass
 
+
 def broadcast(message):
-    for c in clients:
+    disconnected = []
+    with clients_lock:
+        client_list = list(clients)
+        
+    for c in client_list:
         try:
-            c.send((message+"\n").encode())
+            c.send((message + "\n").encode())
         except:
-            pass
+            disconnected.append(c)
+    for c in disconnected:
+        with clients_lock:
+            username = usernames.get(c)
+        cleanup_client(c, username)
+
 
 def send_online_users():
-    names = ",".join(usernames[c] for c in clients)
+    with clients_lock:
+        names = ",".join(usernames[c] for c in clients)
+        client_list = list(clients)
+        
     message = f"[USERS]{names}\n"
-    for c in clients:
+    disconnected = []
+    for c in client_list:
         try:
             c.send(message.encode())
         except:
-            pass
+            disconnected.append(c)
+    for c in disconnected:
+        with clients_lock:
+            username = usernames.get(c)
+        cleanup_client(c, username)
+
 
 def send_private(sender_client,receiver,message):
     global private_count,message_count
-    sender=usernames[sender_client]
-    message_count += 1
-    if message_count==50:
+    
+    with clients_lock:
+        sender = usernames.get(sender_client, "Unknown")
+        client_list = list(clients)
+        usernames_copy = dict(usernames)
+        
+    with stats_lock:
+        message_count += 1
+        current_msg_count = message_count
+        
+    if current_msg_count == 50:
         write_results()
-    for c in clients:
-        if usernames[c]==receiver:
+        
+    for c in client_list:
+        if usernames_copy.get(c) == receiver:
             c.send(f"[PRIVATE] {sender}: {message}\n".encode())
             sender_client.send(f"[To {receiver}] {message}\n".encode())
-            private_count += 1
+            with stats_lock:
+                private_count += 1
             save_history(sender,receiver,"Private",message)
             return
     sender_client.send(b"User not found.\n")
+    
+    
 
 def write_results():
     global message_count
@@ -157,21 +196,63 @@ def write_results():
     global private_count
     global start_time
     global end_time
-    if start_time is None or end_time is None or message_count==0:
-        return
-    total=max(end_time-start_time,0.001)
-    avg=(total/message_count)*1000
-    throughput=message_count/total
-    with open(RESULT_FILE,"a",newline="") as f:
-        csv.writer(f).writerow([len(clients),message_count,broadcast_count,private_count,round(avg,2),round(throughput,2)])
+    
+    with stats_lock:
+        if start_time is None or end_time is None or message_count == 0:
+            return
+            
+        total = max(end_time - start_time, 0.001)
+        avg = (total / message_count) * 1000
+        throughput = message_count / total
+        
+        # Reset for next experiment
+        current_mc = message_count
+        current_bc = broadcast_count
+        current_pc = private_count
+        message_count = 0
+        broadcast_count = 0
+        private_count = 0
+        start_time = None
+        end_time = None
+        
+    with clients_lock:
+        num_clients = len(clients)
+        
+    with open(RESULT_FILE, "a", newline="") as f:
+        csv.writer(f).writerow([num_clients, current_mc, current_bc, current_pc, round(avg, 2), round(throughput, 2)])
         print("Performance Saved")
+    
+    
 
-    # Reset for next experiment
-    message_count = 0
-    broadcast_count = 0
-    private_count = 0
-    start_time = None
-    end_time = None
+def cleanup_client(client, username=None):
+    """Safely remove a disconnected client."""
+
+    if username:
+        broadcast(f"[SERVER] {username} left the chat.")
+
+    with clients_lock:
+        if client in clients:
+            clients.remove(client)
+
+        usernames.pop(client, None)
+        client_ips.pop(client, None)
+        client_ports.pop(client, None)
+        login_times.pop(client, None)
+        status.pop(client, None)
+    
+    try:
+        client.shutdown(socket.SHUT_RDWR)
+    except:
+        pass
+        
+    try:
+        client.close()
+    except:
+        pass
+        
+    send_online_users()
+
+
 
 def handle_client(client, addr):
     global start_time
@@ -182,7 +263,7 @@ def handle_client(client, addr):
     username = None
     try:
         # Receive login request
-        login_data = client.recv(1024).decode()
+        login_data = client.recv(BUFFER_SIZE).decode()
 
         # Expected format:
         # LOGIN|username|password
@@ -235,14 +316,14 @@ def handle_client(client, addr):
         client.send(b"LOGIN_SUCCESS")
 
         # Add authenticated client
-        clients.append(client)
-
-        usernames[client] = username
-        client_ips[client] = addr[0]
-        client_ports[client] = addr[1]
-
-        login_times[client] = (datetime.now().strftime("%H:%M:%S"))
-        status[client] = "Online"
+        with clients_lock:
+            clients.append(client)
+            usernames[client] = username
+            client_ips[client] = addr[0]
+            client_ports[client] = addr[1]
+            login_times[client] = (datetime.now().strftime("%H:%M:%S"))
+            status[client] = "Online"
+            
         last_activity = time.time()
         print(f"{username} authenticated and connected from {addr[0]}:{addr[1]}")
     
@@ -264,13 +345,18 @@ def handle_client(client, addr):
         try:
             
             try:
-                data = client.recv(1024).decode()
+                data = client.recv(BUFFER_SIZE).decode()
 
             except socket.timeout:
                 # Check if user has been inactive for too long
                 if time.time() - last_activity >= SESSION_TIMEOUT:
                     print(f"{username} session timed out.")
-                    security_log("SESSION_TIMEOUT",username,addr[0])
+                    security_log(
+                        "SESSION_TIMEOUT",
+                        username,
+                        addr[0]
+                    )
+
                     break
                 continue
             
@@ -281,55 +367,92 @@ def handle_client(client, addr):
 
             # Client requested logout
             if data == "LOGOUT":
-                print(f"{username} logged out.")security_log("LOGOUT",username,addr[0])
+                print(f"{username} logged out.")
+                security_log(
+                    "LOGOUT",
+                    username,
+                    addr[0])
                 break
 
-            if start_time is None:
-                start_time=time.time()
-                
-            end_time=time.time()
+            with stats_lock:
+                if start_time is None:
+                    start_time = time.time()
+                end_time = time.time()
 
-            if data=="/list":
+            if data == "/list":
                 send_online_users()
 
             elif data.startswith("/msg "):
-                p=data.split(" ",2)
-                if len(p)==3:
-                    send_private(client,p[1],p[2])
+                p = data.split(" ", 2)
+                if len(p) == 3:
+                    send_private(client, p[1], p[2])
 
             else:
-                message_count += 1
-                broadcast_count += 1
-                text=f"[{username}] {data}"
+                with stats_lock:
+                    message_count += 1
+                    broadcast_count += 1
+                    current_msg_count = message_count
+                    
+                text = f"[{username}] {data}"
                 print(text)
                 broadcast(text)
-                save_history(username,"ALL","Broadcast",data)
-                if message_count == 50:
+                save_history(username, "ALL", "Broadcast", data)
+                
+                if current_msg_count == 50:
                     write_results()
-
-        except:
+            
+        except ConnectionResetError:
+            print(f"{username} disconnected unexpectedly.")
+            security_log("CONNECTION_RESET", username, addr[0])
             break
 
-    broadcast(f"[SERVER] {username} left the chat.")
-    
-    if client in clients:
-        clients.remove(client)
+        except ConnectionAbortedError:
+            print(f"{username} aborted the connection.")
+            security_log("CONNECTION_ABORTED", username, addr[0])
+            break
 
-    usernames.pop(client,None)
-    send_online_users()
-    client_ips.pop(client,None)
-    client_ports.pop(client,None)
-    login_times.pop(client,None)
-    status.pop(client,None)
-    client.close()
+        except Exception as e:
+            print(f"Unexpected error with {username}: {e}")
+            security_log("SERVER_ERROR", username, addr[0])
+            break
 
-server=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-server.bind((HOST,PORT))
+    cleanup_client(client, username)
+
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind((HOST, PORT))
 server.listen()
 
 print("Server Started...")
 print("Waiting for clients...")
 
-while True:
-    client,addr=server.accept()
-    threading.Thread(target=handle_client,args=(client,addr),daemon=True).start()
+try:
+    while True:
+        client, addr = server.accept()
+        threading.Thread(
+            target=handle_client,
+            args=(client, addr),
+            daemon=True
+        ).start()
+
+except KeyboardInterrupt:
+
+    print("\nStopping server...")
+    
+    with clients_lock:
+        client_list = list(clients)
+
+    for c in client_list:
+
+        try:
+            c.send(b"[SERVER] Server shutting down.\n")
+        except:
+            pass
+        
+        with clients_lock:
+            username = usernames.get(c)
+        cleanup_client(c, username)
+
+    server.close()
+
+    print("Server stopped successfully.")
