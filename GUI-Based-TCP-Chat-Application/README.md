@@ -1,7 +1,7 @@
-# Secured GUI Based TCP Chat Application
+# Optimized Secured GUI Based TCP Chat Application
 
 ## Objective:
-The objective of this assignment is to enhance the GUI-based TCP Chat Application developed in Assignment 6 by integrating fundamental cybersecurity concepts. The application now supports secure user authentication, password hashing, duplicate login prevention, account lockout after multiple failed login attempts, automatic session timeout, and security event logging while maintaining real-time TCP communication through a graphical interface.
+This project aims to develop a robust TCP-based chat application that delivers secure and efficient real-time communication through an intuitive graphical interface. It integrates modern security mechanisms, including password hashing, authentication, duplicate login prevention, session management, and security logging, while improving overall system reliability through automatic reconnection, thread-safe client management, configuration-based deployment, and performance monitoring. The project serves as a practical implementation of networking, cybersecurity, concurrent programming, and software engineering principles.
 
 ### Software Requirements:
 - Arch Linux / Linux (Recommended)
@@ -23,6 +23,7 @@ The objective of this assignment is to enhance the GUI-based TCP Chat Applicatio
 - os
 - hashlib
 - time
+- json
 
 Install ttkbootstrap using:
 ```bash
@@ -77,6 +78,21 @@ python client_gui.py
 ## User Registration
 
 The application provides a separate utility script (`create_users.py`) for registering new users securely.
+
+## Configuration
+
+The application uses a configuration file named `config.json`.
+
+It stores:
+
+- Server IP Address
+- Port Number
+- Session Timeout
+- Maximum Failed Login Attempts
+- Lock Duration
+- Automatic Reconnection Delay
+
+The configuration can be modified without changing the source code.
 
 ### Purpose
 
@@ -150,6 +166,28 @@ Features available:
 - Login Authentication
 - Duplicate Login Detection
 
+## Reliability Features
+
+The following reliability mechanisms have been implemented:
+
+- Automatic Client Reconnection
+- Graceful Client Disconnection
+- Socket Exception Handling
+- Connection Timeout Handling
+- Automatic Recovery after Server Restart
+- Improved Error Handling
+
+## Scalability Features
+
+The following scalability improvements have been implemented:
+
+- Thread-safe Client Management
+- Thread Synchronization using Locks
+- Efficient Online User Updates
+- Optimized Message Broadcasting
+- Performance Logging
+- Support for Multiple Concurrent Clients
+
 
 ## Sample Screenshots:
 
@@ -192,6 +230,10 @@ The server is responsible for:
 - Private Messaging
 - Chat History Storage
 - Performance Logging
+- Automatic Client Recovery
+- Thread-safe Resource Management
+- Configuration Loading
+- Performance Statistics Collection
 
 ## Authentication Workflow
 
@@ -222,10 +264,16 @@ Features include:
 - Enter Key Support
 - Send Button
 - Disconnect Button
+- Automatic Reconnection
+- Configuration Loading
+- Connection Status Monitoring
 
 ### Communication
-Communication between clients and the server is performed using **TCP sockets**.
-A dedicated receiving thread continuously listens for incoming messages while keeping the GUI responsive.
+Communication between clients and the server is performed using TCP sockets.
+
+The client continuously monitors the server connection. If the connection is lost, the client automatically attempts to reconnect without restarting the application.
+
+A dedicated receiving thread listens for incoming messages while keeping the GUI responsive.
 
 ### Performance Features
 - Multi-threaded Server
@@ -243,6 +291,8 @@ Assignment-06-GUI-Based-TCP-Chat-Application
 ├── server.py
 ├── create_users.py
 ├── users.csv
+├── config.json
+├── performance_results.csv
 ├── security_log.txt
 ├── README.md
 │
@@ -278,6 +328,7 @@ Assignment-06-GUI-Based-TCP-Chat-Application
 - Private Messaging
 - Online User Synchronization
 - Chat History
+- Automatic Reconnection
 
 ### GUI
 
@@ -287,6 +338,20 @@ Assignment-06-GUI-Based-TCP-Chat-Application
 - Online Users Panel
 - Conversation Panel
 - Disconnect Button
+
+
+## Performance Features
+
+- Multi-threaded Server
+- Multi-threaded Client
+- Automatic Client Reconnection
+- Thread-safe Client Management
+- Online User Synchronization
+- Chat History Logging
+- Performance Logging
+- Configuration Management
+- Graceful Client Disconnect
+
 
 ### Security
 
@@ -298,3 +363,4 @@ Assignment-06-GUI-Based-TCP-Chat-Application
 - Session Timeout
 - Security Logging
 - User Registration Utility
+- Configuration File Support
